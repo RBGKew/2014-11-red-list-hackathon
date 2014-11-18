@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<title>Hack the Red List: Endangered Plant Species by Country</title>
+	<style>
+		body {
+			font-family: sans-serif;
+			background: black;
+			color: white;
+		}
+
+		:link {
+			color: cyan;
+		}
+
+		:visited {
+			color: pink;
+		}
+
+		h1 {
+			text-align: center;
+			font-weight: normal;
+		}
+
+		#mapcontainer {
+			margin: 0 auto;
+			width: 960px;
+		}
+
+		.country {
+			fill: #121;
+			stroke: #444;
+			stroke-width: .5px;
+			stroke-linejoin: round;
+		}
+
+		.graticule {
+			fill: #013;
+			stroke: #000;
+			stroke-opacity: .3;
+			stroke-width: .5px;
+		}
+
+		.graticule.outline {
+			stroke: #333;
+			stroke-opacity: 0.5;
+			stroke-width: 0.5px;
+		}
+
+		.graticule.mesh {
+			stroke: #f88;
+			stroke-opacity: 1;
+			stroke-dasharray: 5,2;
+			stroke-width: 1px;
+		}
+	</style>
+</head>
+<body>
+
+<h1>Hack the Red List: Endangered Plant Species by Country</h1>
+
+<div id="mapcontainer">
+	<div id="map"></div>
+</div>
+
+<p>Visualisation showing the number of critically endangered (CR), endangered (EN) and vulnerable (VU) plant species by country, using data from the <a href="http://threatenedplants.myspecies.info/">Sampled Red List Index</a>.  Dark countries do not have any SRLI-listed species.</p>
+
+<p>This is the result of work at the <a href="http://conservationhackathon.org/hack-the-iucn-redlist/">Hack the IUCN Red List</a> hackathon, November 2014.  The source code and data are <a href="https://github.com/RBGKew/2014-11-red-list-hackathon/">on GitHub</a>.  The visualisation uses the <a href="http://www.jasondavies.com/maps/waterman-butterfly/">D3 Waterman Butterfly projection</a>.</p>
+
+<p>Developers:</p>
+
+<ul>
+	<li><a href="https://github.com/trbedwards/">Tom Edwards</a>, Imperial College (data manipulation)</li>
+	<li><a href="https://github.com/RBGKew/">Matthew Blissett</a>, Royal Botanic Gardens, Kew (visualisation)</li>
+</ul>
+
+<script src="./visualisation/d3.min.js"></script>
+<script src="./visualisation/topojson.min.js"></script>
+<script src="./visualisation/waterman.js"></script>
+<script>
+var srliMap;
+
+var width = 960,
+	height = 600;
+
+var rotate = [18, 0],
+	projection = d3.geo.polyhedron.waterman()
+		.scale(118)
+		.translate([width / 2, height / 2])
+		.rotate(rotate),
+	color = d3.scale.category20(),
+	rotation = d3.geo.rotation(rotate),
+	graticule = d3.geo.graticule().minorStep([10, 10]);
+
+var path = d3.geo.path().projection(projection);
+
+var svg = d3.select("#map")
+			.append("svg")
+			.attr("width", width)
+			.attr("height", height);
+
+// Graticules
+//svg.append("path")
+//	.datum(graticule)
+//	.attr("class", "graticule")
+//	.attr("d", path);
+
+// Polyhedron edges
+svg.append("path")
+	.datum({type: "MultiLineString", coordinates: projection.mesh.map(function(segment) {
+	return segment.map(rotation.invert);
+	})})
+	.attr("class", "graticule mesh")
+	.attr("d", path);
+
+// Map outline
+svg.append("path")
+	.datum({type: "Sphere"})
+	.attr("class", "graticule outline")
+	.attr("d", path);
+
+// Is country included in SRLI?
+function included(d) {
+	return (srliMap[d.id]);
+}
+
+// Load CountryCode→Species mapping
+d3.json("./output/srli-data.json", function (json) {
+	srliMap = json;
+
+	// Load world map
+	d3.json("./visualisation/world-110m.json", function(error, world) {
+		var countries = topojson.feature(world, world.objects.countries).features,
+			neighbors = topojson.neighbors(world.objects.countries.geometries);
+
+	// Set the colour scale
+	color = d3.scale.log();
+
+	var maxSpecies = Math.max.apply(null, 
+						Object.keys(srliMap).map(
+							function(country) {
+								return Object.keys(srliMap[country].species).length
+							}
+						));
+
+	color.domain([1,maxSpecies]);
+	color.range(["green", "cyan"]);
+
+	// Define colouring function
+		function colouring(d, i) {
+			if (srliMap[d.id]) {
+				return color(Object.keys(srliMap[d.id].species).length);
+			}
+			else {
+				return null;
+			}
+		}
+
+		svg.selectAll(".country")
+			.data(countries)
+			.enter()
+			.append("path", ".graticule")
+			.attr("class", "country")
+			.attr("d", path)
+			.style("fill", colouring);
+	});
+})
+</script>
+
+</body>
+</html>
